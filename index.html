@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free AI Background Remover | No Watermark</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { removeBackground } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm';
+
+        window.processImage = async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const originalImg = document.getElementById('original');
+            const resultImg = document.getElementById('result');
+            const loading = document.getElementById('loading');
+            const downloadBtn = document.getElementById('download');
+
+            originalImg.src = URL.createObjectURL(file);
+            loading.classList.remove('hidden');
+            resultImg.classList.add('hidden');
+
+            try {
+                // This is the AI part - it runs in your browser!
+                const blob = await removeBackground(file);
+                const url = URL.createObjectURL(blob);
+                
+                resultImg.src = url;
+                resultImg.classList.remove('hidden');
+                downloadBtn.href = url;
+                downloadBtn.classList.remove('hidden');
+            } catch (e) {
+                alert("Error! Try a smaller image.");
+            } finally {
+                loading.classList.add('hidden');
+            }
+        };
+    </script>
+</head>
+<body class="bg-slate-50 font-sans">
+    <nav class="p-6 bg-white border-b flex justify-between items-center shadow-sm">
+        <h1 class="text-2xl font-black text-blue-600">BG.REMOVE</h1>
+        <div class="text-sm font-medium text-slate-500 hidden md:block">AdSense Placeholder: Top Banner</div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto py-12 px-6 text-center">
+        <h2 class="text-4xl font-bold mb-4 leading-tight">Remove background <br><span class="text-blue-600 italic underline">instantly for free.</span></h2>
+        
+        <div class="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 mt-8">
+            <input type="file" onChange="processImage(event)" class="block w-full text-sm text-slate-500 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+            
+            <div id="loading" class="hidden mt-8 flex flex-col items-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
+                <p class="text-blue-600 font-bold">AI is cutting the image...</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8 mt-8">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">Original</p>
+                    <img id="original" class="rounded-xl bg-slate-100 w-full aspect-square object-contain">
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-blue-600 uppercase mb-2">Result</p>
+                    <div class="bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')] bg-slate-200 rounded-xl w-full aspect-square flex items-center justify-center overflow-hidden">
+                        <img id="result" class="hidden max-h-full">
+                    </div>
+                    <a id="download" download="no-bg.png" class="hidden mt-4 block w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-center hover:bg-blue-700 transition">Download HD Image</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- SEO Content for AdSense -->
+        <div class="mt-16 text-left border-t pt-10">
+            <h3 class="text-xl font-bold mb-4">Why use our Background Remover?</h3>
+            <p class="text-slate-600 mb-4 leading-relaxed">This tool uses local Browser-AI to process your images. That means your data never leaves your computer, making it the most private background removal tool available online.</p>
+            <p class="text-slate-600 leading-relaxed">Perfect for Amazon sellers, photographers, and graphic designers who need transparent PNGs in seconds.</p>
+        </div>
+    </main>
+
+    <footer class="p-10 text-center text-slate-400 text-sm">
+        &copy; 2024 BG.REMOVE AI. <br> AdSense Footer Slot
+    </footer>
+</body>
+</html>
