@@ -3,83 +3,197 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Free AI Background Remover | No Watermark</title>
+    <title>SnapCut Pro | AI Background Editor</title>
+    <!-- Tailwind for Design -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fabric.js for the Erase/Restore Canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <!-- Lucide for Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        .canvas-container { margin: 0 auto; border-radius: 12px; overflow: hidden; background-image: url('https://www.transparenttextures.com/patterns/checkerboard.png'); }
+        .active-tool { border-color: #2563eb; background-color: #eff6ff; color: #2563eb; }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-white border-b px-6 py-3 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-2 font-black text-xl text-blue-600">
+            <i data-lucide="scissors"></i> SnapCut <span class="text-slate-400 font-light text-sm hidden md:inline">v1.0 Pro</span>
+        </div>
+        <div id="actionButtons" class="hidden flex gap-3">
+            <button onclick="resetCanvas()" class="text-slate-500 px-4 py-2 hover:bg-slate-100 rounded-lg text-sm font-bold">Reset</button>
+            <button onclick="downloadImage()" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200">
+                <i data-lucide="download" class="w-4 h-4"></i> Download HD
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex flex-1 overflow-hidden">
+        
+        <!-- Sidebar Tools -->
+        <aside id="sidebar" class="w-72 bg-white border-r p-6 overflow-y-auto hidden shrink-0">
+            <!-- Background Section -->
+            <div class="mb-8">
+                <label class="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-4">Background Color</label>
+                <div class="grid grid-cols-5 gap-2 mb-4">
+                    <button onclick="setBg('transparent')" class="w-full aspect-square rounded-md border bg-slate-100 flex items-center justify-center" title="Transparent"><i data-lucide="ban" class="w-4 h-4"></i></button>
+                    <button onclick="setBg('#ffffff')" class="w-full aspect-square rounded-md border bg-white"></button>
+                    <button onclick="setBg('#3b82f6')" class="w-full aspect-square rounded-md border bg-blue-500"></button>
+                    <button onclick="setBg('#ef4444')" class="w-full aspect-square rounded-md border bg-red-500"></button>
+                    <button onclick="setBg('#000000')" class="w-full aspect-square rounded-md border bg-black"></button>
+                </div>
+                <input type="color" oninput="setBg(this.value)" class="w-full h-10 p-1 rounded-md bg-slate-50 border cursor-pointer">
+            </div>
+
+            <!-- Fine Tune Section -->
+            <div class="mb-8 border-t pt-6">
+                <label class="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-4">Refine Edges</label>
+                <div class="flex flex-col gap-2">
+                    <button id="eraseBtn" onclick="setMode('erase')" class="flex items-center gap-3 px-4 py-3 border rounded-xl font-medium transition active-tool">
+                        <i data-lucide="eraser" class="w-4 h-4"></i> Erase
+                    </button>
+                    <button id="restoreBtn" onclick="setMode('restore')" class="flex items-center gap-3 px-4 py-3 border rounded-xl font-medium transition">
+                        <i data-lucide="brush" class="w-4 h-4"></i> Restore
+                    </button>
+                </div>
+                <div class="mt-4">
+                    <label class="text-xs text-slate-400 mb-2 block">Brush Size</label>
+                    <input type="range" min="1" max="100" value="20" oninput="changeBrushSize(this.value)" class="w-full">
+                </div>
+            </div>
+        </aside>
+
+        <!-- Canvas Area -->
+        <section class="flex-1 relative flex items-center justify-center p-10 overflow-auto">
+            
+            <!-- Upload Start Page -->
+            <div id="uploadView" class="max-w-xl w-full text-center">
+                <div class="bg-white p-12 rounded-[40px] shadow-2xl shadow-slate-200 border border-white relative overflow-hidden">
+                    <input type="file" onchange="initApp(event)" class="absolute inset-0 opacity-0 cursor-pointer z-10" accept="image/*">
+                    <div class="bg-blue-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 text-blue-600">
+                        <i data-lucide="upload-cloud" class="w-10 h-10"></i>
+                    </div>
+                    <h2 class="text-3xl font-black mb-2">Remove Background</h2>
+                    <p class="text-slate-400 font-medium">Upload a photo to start. 100% Free & HD.</p>
+                </div>
+                <p class="mt-8 text-slate-400 text-sm">Supports JPG, PNG, WEBP up to 20MB</p>
+            </div>
+
+            <!-- Loading Overlay -->
+            <div id="loadingOverlay" class="hidden flex flex-col items-center">
+                <div class="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p class="font-bold text-slate-700">AI is analyzing subject...</p>
+                <p class="text-sm text-slate-400">This takes 5-10 seconds</p>
+            </div>
+
+            <!-- The Real Canvas -->
+            <div id="canvasWrap" class="hidden">
+                <canvas id="mainCanvas"></canvas>
+            </div>
+
+        </section>
+    </main>
+
     <script type="module">
         import { removeBackground } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm';
 
-        window.processImage = async (event) => {
+        let canvas;
+        let originalImg;
+
+        window.initApp = async (event) => {
             const file = event.target.files[0];
             if (!file) return;
 
-            const originalImg = document.getElementById('original');
-            const resultImg = document.getElementById('result');
-            const loading = document.getElementById('loading');
-            const downloadBtn = document.getElementById('download');
-
-            originalImg.src = URL.createObjectURL(file);
-            loading.classList.remove('hidden');
-            resultImg.classList.add('hidden');
+            // 1. UI Switch
+            document.getElementById('uploadView').classList.add('hidden');
+            document.getElementById('loadingOverlay').classList.remove('hidden');
 
             try {
-                // This is the AI part - it runs in your browser!
-                const blob = await removeBackground(file);
+                // 2. AI Background Removal
+                const blob = await removeBackground(file, {
+                    progress: (step, progress) => console.log(`${step}: ${progress}`)
+                });
                 const url = URL.createObjectURL(blob);
-                
-                resultImg.src = url;
-                resultImg.classList.remove('hidden');
-                downloadBtn.href = url;
-                downloadBtn.classList.remove('hidden');
-            } catch (e) {
-                alert("Error! Try a smaller image.");
-            } finally {
-                loading.classList.add('hidden');
+
+                // 3. Setup Canvas
+                setupEditor(url);
+            } catch (err) {
+                alert("AI failed to process. Try a clearer photo.");
+                location.reload();
             }
         };
-    </script>
-</head>
-<body class="bg-slate-50 font-sans">
-    <nav class="p-6 bg-white border-b flex justify-between items-center shadow-sm">
-        <h1 class="text-2xl font-black text-blue-600">BG.REMOVE</h1>
-        <div class="text-sm font-medium text-slate-500 hidden md:block">AdSense Placeholder: Top Banner</div>
-    </nav>
 
-    <main class="max-w-4xl mx-auto py-12 px-6 text-center">
-        <h2 class="text-4xl font-bold mb-4 leading-tight">Remove background <br><span class="text-blue-600 italic underline">instantly for free.</span></h2>
-        
-        <div class="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 mt-8">
-            <input type="file" onChange="processImage(event)" class="block w-full text-sm text-slate-500 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+        function setupEditor(imgUrl) {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+            document.getElementById('canvasWrap').classList.remove('hidden');
+            document.getElementById('sidebar').classList.remove('hidden');
+            document.getElementById('actionButtons').classList.remove('hidden');
+
+            canvas = new fabric.Canvas('mainCanvas', {
+                isDrawingMode: false,
+                backgroundColor: 'transparent'
+            });
+
+            fabric.Image.fromURL(imgUrl, (img) => {
+                originalImg = img;
+                // Resize Canvas to match Image
+                const maxWidth = window.innerWidth * 0.6;
+                const scale = maxWidth / img.width;
+                
+                img.set({ scaleX: scale, scaleY: scale });
+                canvas.setWidth(img.width * scale);
+                canvas.setHeight(img.height * scale);
+                canvas.add(img);
+                canvas.centerObject(img);
+                canvas.renderAll();
+            });
+
+            lucide.createIcons();
+        }
+
+        window.setBg = (color) => {
+            if (color === 'transparent') {
+                canvas.setBackgroundColor('transparent', canvas.renderAll.bind(canvas));
+                canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
+            } else {
+                canvas.setBackgroundColor(color, canvas.renderAll.bind(canvas));
+            }
+        };
+
+        window.setMode = (mode) => {
+            canvas.isDrawingMode = true;
+            canvas.freeDrawingBrush = new fabric.EraserBrush(canvas);
+            canvas.freeDrawingBrush.width = 20;
             
-            <div id="loading" class="hidden mt-8 flex flex-col items-center">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
-                <p class="text-blue-600 font-bold">AI is cutting the image...</p>
-            </div>
+            document.getElementById('eraseBtn').classList.toggle('active-tool', mode === 'erase');
+            document.getElementById('restoreBtn').classList.toggle('active-tool', mode === 'restore');
 
-            <div class="grid md:grid-cols-2 gap-8 mt-8">
-                <div>
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">Original</p>
-                    <img id="original" class="rounded-xl bg-slate-100 w-full aspect-square object-contain">
-                </div>
-                <div>
-                    <p class="text-xs font-bold text-blue-600 uppercase mb-2">Result</p>
-                    <div class="bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')] bg-slate-200 rounded-xl w-full aspect-square flex items-center justify-center overflow-hidden">
-                        <img id="result" class="hidden max-h-full">
-                    </div>
-                    <a id="download" download="no-bg.png" class="hidden mt-4 block w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-center hover:bg-blue-700 transition">Download HD Image</a>
-                </div>
-            </div>
-        </div>
+            if (mode === 'restore') {
+                canvas.freeDrawingBrush.inverted = true;
+            } else {
+                canvas.freeDrawingBrush.inverted = false;
+            }
+        };
 
-        <!-- SEO Content for AdSense -->
-        <div class="mt-16 text-left border-t pt-10">
-            <h3 class="text-xl font-bold mb-4">Why use our Background Remover?</h3>
-            <p class="text-slate-600 mb-4 leading-relaxed">This tool uses local Browser-AI to process your images. That means your data never leaves your computer, making it the most private background removal tool available online.</p>
-            <p class="text-slate-600 leading-relaxed">Perfect for Amazon sellers, photographers, and graphic designers who need transparent PNGs in seconds.</p>
-        </div>
-    </main>
+        window.changeBrushSize = (val) => {
+            if(canvas.freeDrawingBrush) canvas.freeDrawingBrush.width = parseInt(val);
+        };
 
-    <footer class="p-10 text-center text-slate-400 text-sm">
-        &copy; 2024 BG.REMOVE AI. <br> AdSense Footer Slot
-    </footer>
+        window.downloadImage = () => {
+            const dataURL = canvas.toDataURL({ format: 'png', quality: 1 });
+            const link = document.createElement('a');
+            link.download = 'snapcut-result.png';
+            link.href = dataURL;
+            link.click();
+        };
+
+        window.resetCanvas = () => { location.reload(); };
+
+        lucide.createIcons();
+    </script>
 </body>
 </html>
